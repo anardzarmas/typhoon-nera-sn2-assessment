@@ -116,7 +116,13 @@ textarea:focus, input:focus {
 label { color: #002B5C !important; font-weight: 600 !important; font-size: 0.88rem !important; }
 
 /* ── Radio y checkbox ── */
-[data-testid="stRadio"] label, [data-testid="stMultiSelect"] label {
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] div,
+[data-testid="stRadio"] p,
+[data-testid="stRadio"] span,
+[data-testid="stMultiSelect"] label,
+[data-testid="stMultiSelect"] span,
+[data-testid="stMultiSelect"] p {
     font-weight: 400 !important;
     color: #1A1A2E !important;
 }
