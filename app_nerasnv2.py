@@ -2,6 +2,7 @@ import streamlit as st
 import datetime
 import os
 import base64
+import json
 from fpdf import FPDF
 
 st.set_page_config(
@@ -24,6 +25,66 @@ def _b64(path):
 
 b64_typhoon = _b64(logo_typhoon)
 b64_cisco   = _b64(logo_cisco)
+
+# ── Autosave ──────────────────────────────────────────────────────
+AUTOSAVE_FILE = os.path.join(DIRECTORIO_ACTUAL, ".form_autosave.json")
+
+# Todas las keys del formulario
+_FORM_KEYS = [
+    "gi_empresa", "gi_contacto", "gi_correo", "gi_puesto",
+    "gi_am_cisco", "gi_resp_best", "gi_fecha", "gi_vertical",
+    "e1", "e2", "e3", "e4",
+    "t1", "t2", "t3", "t4",
+    "r1", "r2", "r3", "r4", "r_poe", "r_smart",
+    "v1", "v2", "v3", "v4",
+    "s1", "s2", "s3", "s4",
+]
+
+def _autosave_load():
+    """Carga el borrador guardado desde JSON."""
+    try:
+        with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _autosave_save():
+    """Guarda el estado actual del formulario en JSON."""
+    data = {}
+    for k in _FORM_KEYS:
+        if k in st.session_state:
+            v = st.session_state[k]
+            if isinstance(v, datetime.date):
+                data[k] = v.isoformat()
+            else:
+                data[k] = v
+    try:
+        with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def _autosave_clear():
+    """Borra el borrador guardado."""
+    try:
+        if os.path.exists(AUTOSAVE_FILE):
+            os.remove(AUTOSAVE_FILE)
+    except Exception:
+        pass
+
+# Cargar borrador al iniciar sesión (solo la primera vez)
+if "_autosave_loaded" not in st.session_state:
+    saved = _autosave_load()
+    for k, v in saved.items():
+        if k not in st.session_state:
+            if k == "gi_fecha":
+                try:
+                    st.session_state[k] = datetime.date.fromisoformat(v)
+                except Exception:
+                    pass
+            else:
+                st.session_state[k] = v
+    st.session_state["_autosave_loaded"] = True
 
 # ── CSS – Manual de Identidad BEST Typhoon ────────────────────────
 st.markdown("""
@@ -229,18 +290,19 @@ st.markdown("---")
 st.header("Información General del Proyecto")
 col1, col2, col3 = st.columns(3)
 with col1:
-    empresa_nombre    = st.text_input("Nombre de la empresa")
-    contacto_cliente  = st.text_input("Contacto principal")
-    correo_contacto   = st.text_input("Correo del contacto")
-    puesto_contacto   = st.text_input("Puesto")
+    empresa_nombre    = st.text_input("Nombre de la empresa",  key="gi_empresa")
+    contacto_cliente  = st.text_input("Contacto principal",    key="gi_contacto")
+    correo_contacto   = st.text_input("Correo del contacto",   key="gi_correo")
+    puesto_contacto   = st.text_input("Puesto",                key="gi_puesto")
 with col2:
-    am_cisco          = st.text_input("AM de Cisco")
-    responsable_best  = st.text_input("Responsable de Best")
-    fecha_evaluacion  = st.date_input("Fecha de evaluación", datetime.date.today())
+    am_cisco          = st.text_input("AM de Cisco",           key="gi_am_cisco")
+    responsable_best  = st.text_input("Responsable de Best",   key="gi_resp_best")
+    fecha_evaluacion  = st.date_input("Fecha de evaluación",   datetime.date.today(), key="gi_fecha")
 with col3:
     vertical_negocio  = st.selectbox(
         "Vertical de negocio",
-        ["Finanzas", "Educación", "Salud", "Manufactura", "Retail", "Sector Público", "Otro"]
+        ["Finanzas", "Educación", "Salud", "Manufactura", "Retail", "Sector Público", "Otro"],
+        key="gi_vertical"
     )
 
 st.markdown("---")
@@ -304,13 +366,13 @@ with tab3:
             "15.4W (PoE - IEEE 802.3af)", "30W (PoE+ - IEEE 802.3at)",
             "60W (UPOE/PoE++ - IEEE 802.3bt)", "90W (UPoE+/PoE+++ - IEEE 802.3bt)",
             "Sin requerimientos PoE", "Otro"
-        ])
+        ], key="r_poe")
     with col_smart:
         st.markdown("**Edificios Inteligentes (Smart Buildings)**")
         smart_build = st.multiselect("Áreas que se beneficiarían de Smart Buildings:", [
             "Eficiencia Energética (iluminación y HVAC)", "Seguridad y Control de Acceso",
             "Calidad del Aire Interior", "Gestión de Ocupación", "Mantenimiento Preventivo"
-        ])
+        ], key="r_smart")
 
 with tab4:
     st.subheader("4. Aseguramiento (Assurance) y Visibilidad")
@@ -741,6 +803,9 @@ def generar_pdf():
     return result.encode('latin-1', 'replace')
 
 
+# ── AUTOSAVE: guardar en cada recarga ────────────────────────────
+_autosave_save()
+
 # ── BOTÓN DE DESCARGA ─────────────────────────────────────────────
 pdf_bytes = None
 try:
@@ -760,6 +825,26 @@ if pdf_bytes:
         mime="application/pdf",
         use_container_width=True,
     )
+
+# ── Indicador de autosave + botón limpiar ────────────────────────
+col_save, col_clear = st.columns([3, 1])
+with col_save:
+    if os.path.exists(AUTOSAVE_FILE):
+        try:
+            mtime = os.path.getmtime(AUTOSAVE_FILE)
+            ts = datetime.datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M:%S")
+            st.caption(f"💾 Borrador guardado automáticamente · Último guardado: {ts}")
+        except Exception:
+            st.caption("💾 Borrador guardado automáticamente.")
+with col_clear:
+    if st.button("🗑️ Limpiar formulario", use_container_width=True):
+        _autosave_clear()
+        for k in _FORM_KEYS:
+            if k in st.session_state:
+                del st.session_state[k]
+        if "_autosave_loaded" in st.session_state:
+            del st.session_state["_autosave_loaded"]
+        st.rerun()
 
 # ── FOOTER ────────────────────────────────────────────────────────
 st.markdown(f"""
